@@ -1,0 +1,218 @@
+/* ==========================================================================
+   WEBSITE THEMES — Musculation · CrossFit · Boxing · Yoga & Bien-être · Modern
+   Selected per club (GymSettings.themeId) and applied as data-site-theme on
+   <html> (app/layout.tsx). Each theme sets typography, shape, section
+   styling and motion; the page LAYOUTS live in components/themes/*.
+   Fonts are self-hosted (@fontsource, bundled by Next) — nothing is loaded
+   from a third-party CDN, which the site's CSP forbids anyway.
+   ========================================================================== */
+@import "@fontsource/anton/latin-400.css";
+@import "@fontsource/barlow/latin-400.css";
+@import "@fontsource/barlow/latin-600.css";
+@import "@fontsource/barlow-condensed/latin-600.css";
+@import "@fontsource/barlow-condensed/latin-800.css";
+@import "@fontsource/barlow-condensed/latin-800-italic.css";
+@import "@fontsource/bebas-neue/latin-400.css";
+@import "@fontsource/cormorant-garamond/latin-500.css";
+@import "@fontsource/cormorant-garamond/latin-600.css";
+@import "@fontsource/nunito-sans/latin-400.css";
+@import "@fontsource/nunito-sans/latin-700.css";
+@import "@fontsource/space-grotesk/latin-500.css";
+@import "@fontsource/space-grotesk/latin-700.css";
+@import "@fontsource/inter/latin-400.css";
+@import "@fontsource/inter/latin-600.css";
+@import "@fontsource/inter/latin-700.css";
+
+/* ── Shared hooks used by every public section ───────────────────────────── */
+.theme-scope {
+  font-family: var(--t-body-font, system-ui, sans-serif);
+  --site-deep: color-mix(in srgb, var(--brand) 38%, #0b1220);
+  --site-deep-hover: color-mix(in srgb, var(--site-deep) 82%, white);
+}
+.theme-heading {
+  font-family: var(--t-heading-font, inherit);
+  text-transform: var(--t-heading-transform, none);
+  letter-spacing: var(--t-heading-tracking, -0.01em);
+  font-weight: var(--t-heading-weight, 700);
+  line-height: 1.05;
+}
+.theme-card {
+  border-radius: var(--t-radius, 1.5rem);
+  box-shadow: var(--t-card-shadow, var(--shadow-sm));
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s, border-color 0.35s;
+}
+.theme-card:hover { transform: translateY(var(--t-card-lift, -4px)); }
+.theme-section { background: var(--t-section-bg, var(--bg-primary)); color: var(--text-primary); position: relative; }
+.theme-section-alt { background: var(--t-section-alt, var(--bg-muted)); color: var(--text-primary); position: relative; }
+.theme-btn {
+  border-radius: var(--t-btn-radius, 9999px);
+  font-family: var(--t-heading-font, inherit);
+  text-transform: var(--t-heading-transform, none);
+  letter-spacing: var(--t-btn-tracking, 0.02em);
+  background: var(--brand);
+  color: var(--brand-contrast);
+  transition: transform 0.25s, filter 0.25s, box-shadow 0.25s;
+}
+.theme-btn:hover { filter: brightness(1.08); transform: translateY(-2px); }
+.theme-btn-ghost {
+  border-radius: var(--t-btn-radius, 9999px);
+  font-family: var(--t-heading-font, inherit);
+  text-transform: var(--t-heading-transform, none);
+  border: 1.5px solid currentColor;
+  transition: background-color 0.25s, transform 0.25s;
+}
+.theme-btn-ghost:hover { background: color-mix(in srgb, currentColor 12%, transparent); transform: translateY(-2px); }
+
+/* Entrance animation (each theme overrides the keyframe it uses) */
+.t-reveal { animation: var(--t-reveal, t-rise) 0.9s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.t-reveal-2 { animation-delay: 0.12s; }
+.t-reveal-3 { animation-delay: 0.24s; }
+@keyframes t-rise { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+@keyframes t-slam { 0% { opacity: 0; transform: scale(1.25) translateY(-14px); } 60% { opacity: 1; transform: scale(0.98); } 100% { transform: none; } }
+@keyframes t-slide { from { opacity: 0; transform: translateX(-60px) skewX(-8deg); } to { opacity: 1; transform: none; } }
+@keyframes t-fade { from { opacity: 0; filter: blur(8px); } to { opacity: 1; filter: none; } }
+@keyframes t-pop { from { opacity: 0; transform: scale(0.94) translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes t-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes t-stripes { from { background-position: 0 0; } to { background-position: 80px 0; } }
+@keyframes t-spot { 0%, 100% { opacity: 0.85; transform: translateX(-4%) rotate(-3deg); } 50% { opacity: 1; transform: translateX(4%) rotate(3deg); } }
+@keyframes t-breathe { 0%, 100% { transform: scale(1); opacity: 0.55; } 50% { transform: scale(1.12); opacity: 0.8; } }
+@keyframes t-drift { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(24px, -18px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .t-reveal, .t-marquee-track, .t-stripes, .t-spot, .t-blob { animation: none !important; }
+  .theme-card:hover, .theme-btn:hover, .theme-btn-ghost:hover { transform: none; }
+}
+
+/* ── 1. MUSCULATION — brushed steel, massive condensed type, hard edges ──── */
+[data-site-theme="musculation"] {
+  --t-heading-font: "Anton", Impact, "Arial Narrow", sans-serif;
+  --t-body-font: "Inter", system-ui, sans-serif;
+  --t-heading-transform: uppercase;
+  --t-heading-tracking: 0.02em;
+  --t-heading-weight: 400;
+  --t-radius: 4px;
+  --t-btn-radius: 2px;
+  --t-btn-tracking: 0.12em;
+  --t-card-shadow: 0 0 0 1px rgb(255 255 255 / 0.06), 0 14px 30px -12px rgb(0 0 0 / 0.7);
+  --t-card-lift: -6px;
+  --t-reveal: t-slam;
+}
+.hero-forge {
+  background:
+    repeating-linear-gradient(115deg, rgb(255 255 255 / 0.025) 0 2px, transparent 2px 7px),
+    radial-gradient(ellipse at 75% 40%, color-mix(in srgb, var(--brand) 22%, transparent), transparent 60%),
+    linear-gradient(180deg, #0a0a0a, #171717);
+}
+.forge-edge { clip-path: polygon(0 0, 100% 0, 100% 78%, 0 100%); }
+.forge-plate-line { background: repeating-linear-gradient(90deg, var(--brand) 0 22px, transparent 22px 30px); height: 6px; }
+
+/* ── 2. CROSSFIT — WOD board, diagonal slashes, italic condensed ─────────── */
+[data-site-theme="crossfit"] {
+  --t-heading-font: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --t-body-font: "Barlow", "Inter", system-ui, sans-serif;
+  --t-heading-transform: uppercase;
+  --t-heading-tracking: 0.01em;
+  --t-heading-weight: 800;
+  --t-radius: 10px;
+  --t-btn-radius: 6px;
+  --t-btn-tracking: 0.08em;
+  --t-card-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 55%, transparent), 8px 8px 0 0 color-mix(in srgb, var(--brand) 30%, transparent);
+  --t-card-lift: -3px;
+  --t-reveal: t-slide;
+}
+.hero-arena {
+  background:
+    linear-gradient(135deg, transparent 0 62%, color-mix(in srgb, var(--brand) 85%, transparent) 62% 70%, transparent 70% 74%, color-mix(in srgb, var(--brand-2) 70%, transparent) 74% 78%, transparent 78%),
+    radial-gradient(circle at 20% 20%, rgb(255 255 255 / 0.05), transparent 40%),
+    #101012;
+}
+.arena-italic { font-style: italic; }
+.t-stripes {
+  background: repeating-linear-gradient(-45deg, var(--brand) 0 14px, #0b0b0c 14px 28px);
+  background-size: 80px 100%;
+  animation: t-stripes 2.4s linear infinite;
+  height: 14px;
+}
+.arena-timer { font-variant-numeric: tabular-nums; font-family: var(--t-heading-font); }
+
+/* ── 3. BOXING — spotlit ring, ropes, poster lettering ───────────────────── */
+[data-site-theme="boxing"] {
+  --t-heading-font: "Bebas Neue", Impact, sans-serif;
+  --t-body-font: "Inter", system-ui, sans-serif;
+  --t-heading-transform: uppercase;
+  --t-heading-tracking: 0.06em;
+  --t-heading-weight: 400;
+  --t-radius: 14px;
+  --t-btn-radius: 4px;
+  --t-btn-tracking: 0.16em;
+  --t-card-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08), 0 20px 40px -18px rgb(0 0 0 / 0.9);
+  --t-card-lift: -5px;
+  --t-reveal: t-fade;
+}
+.hero-ring {
+  background:
+    radial-gradient(ellipse 60% 70% at 50% 8%, rgb(255 244 214 / 0.22), transparent 65%),
+    radial-gradient(ellipse at 50% 120%, color-mix(in srgb, var(--brand) 45%, transparent), transparent 60%),
+    #0a0807;
+}
+.ring-spot { background: conic-gradient(from 180deg at 50% 0%, transparent 150deg, rgb(255 244 214 / 0.18) 175deg 185deg, transparent 210deg); animation: t-spot 7s ease-in-out infinite; transform-origin: 50% 0; }
+.ring-rope { height: 5px; border-radius: 9999px; background: linear-gradient(90deg, transparent, var(--brand) 12% 88%, transparent); box-shadow: 0 0 14px color-mix(in srgb, var(--brand) 60%, transparent); }
+.ring-rope.alt { background: linear-gradient(90deg, transparent, #fafafa 12% 88%, transparent); box-shadow: 0 0 12px rgb(255 255 255 / 0.35); }
+
+/* ── 4. YOGA & BIEN-ÊTRE — soft arches, serif, calm light ────────────────── */
+[data-site-theme="yoga"] {
+  --t-heading-font: "Cormorant Garamond", Georgia, serif;
+  --t-body-font: "Nunito Sans", system-ui, sans-serif;
+  --t-heading-transform: none;
+  --t-heading-tracking: -0.01em;
+  --t-heading-weight: 500;
+  --t-radius: 2rem;
+  --t-btn-radius: 9999px;
+  --t-btn-tracking: 0.04em;
+  --t-card-shadow: 0 18px 50px -24px color-mix(in srgb, var(--brand) 45%, transparent);
+  --t-card-lift: -3px;
+  --t-reveal: t-fade;
+  --t-section-bg: #f6f1ea;
+  --t-section-alt: #efe7dc;
+}
+html.dark[data-site-theme="yoga"] { --t-section-bg: #0f1a19; --t-section-alt: #14211f; }
+.hero-studio {
+  background:
+    radial-gradient(60% 60% at 15% 20%, color-mix(in srgb, var(--brand) 22%, transparent), transparent 70%),
+    radial-gradient(50% 55% at 90% 80%, color-mix(in srgb, var(--brand-2) 28%, transparent), transparent 70%),
+    linear-gradient(180deg, #f9f5ee, #f1e9dd);
+}
+html.dark .hero-studio {
+  background:
+    radial-gradient(60% 60% at 15% 20%, color-mix(in srgb, var(--brand) 25%, transparent), transparent 70%),
+    radial-gradient(50% 55% at 90% 80%, color-mix(in srgb, var(--brand-2) 18%, transparent), transparent 70%),
+    linear-gradient(180deg, #0c1514, #101c1b);
+}
+.studio-arch { border-radius: 999px 999px 2rem 2rem; overflow: hidden; background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 14%, transparent), color-mix(in srgb, var(--brand-2) 18%, transparent)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 25%, transparent); }
+.t-blob { position: absolute; border-radius: 9999px; filter: blur(46px); background: var(--brand); opacity: 0.35; animation: t-breathe 9s ease-in-out infinite; }
+
+/* ── 5. FITNESS MODERNE — bento grid, frosted glass, gradients ───────────── */
+[data-site-theme="modern"] {
+  --t-heading-font: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --t-body-font: "Inter", system-ui, sans-serif;
+  --t-heading-transform: none;
+  --t-heading-tracking: -0.03em;
+  --t-heading-weight: 700;
+  --t-radius: 1.75rem;
+  --t-btn-radius: 9999px;
+  --t-btn-tracking: 0;
+  --t-card-shadow: 0 1px 0 rgb(255 255 255 / 0.5) inset, 0 24px 48px -28px rgb(15 23 42 / 0.35);
+  --t-card-lift: -4px;
+  --t-reveal: t-pop;
+}
+.hero-bento {
+  background:
+    radial-gradient(60% 50% at 10% 0%, color-mix(in srgb, var(--brand) 24%, transparent), transparent 70%),
+    radial-gradient(50% 50% at 100% 100%, color-mix(in srgb, var(--brand-2) 24%, transparent), transparent 70%),
+    var(--bg-primary);
+}
+.bento-glass { background: color-mix(in srgb, var(--bg-card) 72%, transparent); backdrop-filter: blur(16px) saturate(1.4); border: 1px solid var(--border-light); }
+.bento-grad { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: var(--brand-contrast); }
+
+/* Marquee strip (Musculation / CrossFit) */
+.t-marquee-track { display: flex; width: max-content; animation: t-marquee 28s linear infinite; }

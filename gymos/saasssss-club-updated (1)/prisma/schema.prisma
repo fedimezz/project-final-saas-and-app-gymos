@@ -1,0 +1,1049 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  // Platform-level: not tied to any Club (User.clubId is null for this role).
+  // Manages the SaaS platform itself — never an individual gym's data.
+  SUPER_ADMIN
+  // Gym-level roles: always scoped to exactly one Club via User.clubId.
+  MEMBER
+  ADMIN
+  OWNER
+  COACH
+}
+
+// Status of a MEMBER's paid membership at their gym (unchanged — this is
+// the gym-membership side, NOT the gym's SaaS subscription to the platform;
+// see ClubSubscription/SaasPlan below for that).
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  SUSPENDED
+}
+
+// ─── Multi-tenancy / Platform enums ───────────────────────────────────────────
+
+// Lifecycle status of a Club (gym / tenant) on the platform.
+enum ClubStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+// Which SaaS plan tier a Club is on. The actual limits (member caps, storage,
+// etc.) live in SaasPlan.limits (JSON), NOT hardcoded per tier here — this
+// enum only identifies which plan row applies, so limits stay centrally
+// configurable without a schema change (see spec: "one centralized
+// plan/feature configuration").
+enum SaasPlanTier {
+  STARTER
+  PRO
+  BUSINESS
+}
+
+// Status of a Club's SaaS subscription (Club → pays → Platform).
+// Distinct from SubscriptionStatus above, which is Member → pays → Gym.
+enum PlatformSubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  SUSPENDED
+}
+
+enum ActivityType {
+  BODYBUILDING
+  FITNESS
+  CARDIO
+  CROSSFIT
+  YOGA
+  PILATES
+  BOXE
+  MMA
+  AQUAGYM
+  PADEL
+  ZUMBA
+  SPINNING
+}
+
+enum ReportStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum Language {
+  FR
+  EN
+  AR
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+// ─── Club (Tenant) ──────────────────────────────────────────────────────────
+// The root of multi-tenancy. Every gym-owned row in this schema ultimately
+// belongs to exactly one Club. `slug` is the subdomain
+// (gym-a.yoursaas.com -> slug "gym-a") and is how the current tenant is
+// resolved from the request hostname server-side (see lib/tenant.ts,
+// added in Phase 3) — NEVER from a client-supplied clubId.
+//
+// Branding/website fields that used to live on the singleton GymSettings
+// row are still on GymSettings (now one-per-Club via a 1:1 relation) rather
+// than merged in here, to avoid rewriting every call site that already
+// reads GymSettings — see GymSettings below.
+model Club {
+  id              String     @id @default(cuid())
+  slug            String     @unique
+  name            String
+  status          ClubStatus @default(TRIAL)
+  // Custom domain support is intentionally NOT built yet (see spec: don't
+  // implement prematurely) but the column exists now so it can be turned on
+  // later without another migration touching this core table.
+  customDomain    String?    @unique
+  trialEndsAt     DateTime?
+  suspendedAt     DateTime?
+  suspendedReason String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  subscription ClubSubscription?
+  settings     GymSettings?
+
+  users                 User[]
+  coaches               Coach[]
+  weeklyPlans           WeeklyPlan[]
+  sessions              Session[]
+  userSessions          UserSession[]
+  membershipPlans       MembershipPlan[]
+  subscriptions         Subscription[]
+  payments              Payment[]
+  membershipCards       MembershipCard[]
+  attendances           Attendance[]
+  notifications         Notification[]
+  posts                 Post[]
+  promotions            Promotion[]
+  deviceTokens          DeviceToken[]
+  pageContents          PageContent[]
+  rolePermissions       RolePermission[]
+  memberReports         MemberReport[]
+  activityLogs          ActivityLog[]
+  saasPayments          SaasPayment[]
+  websiteChangeRequests WebsiteChangeRequest[]
+  domainRequests        DomainRequest[]
+  serviceRequests       ServiceRequest[]
+
+  @@index([status])
+  @@map("clubs")
+}
+
+// ─── SaaS Plan (platform plan catalog) ─────────────────────────────────────────
+// Centralized, DB-backed plan/feature configuration (spec section 6): limits
+// are data (JSON), not scattered `if (plan === "PRO")` checks throughout the
+// app. lib/plan-limits.ts (Phase 7) reads this table — never hardcodes
+// numbers itself. Seeded with STARTER/PRO/BUSINESS in prisma/seed.ts.
+//
+// Shape of `limits` JSON (documented here, enforced in code):
+// {
+//   maxMembers: number | null,       // null = unlimited/fair-use
+//   maxCoaches: number | null,
+//   maxAdmins: number | null,
+//   storageGB: number,
+//   maxBookingsPerMonth: number | null,
+//   maxCustomPages: number | null,
+//   customDomain: boolean,
+//   advancedAnalytics: boolean,
+//   revenueAnalytics: boolean,
+//   apiAccess: boolean,
+//   whiteLabel: boolean
+// }
+model SaasPlan {
+  id           String       @id @default(cuid())
+  tier         SaasPlanTier @unique
+  name         String
+  priceMonthly Float
+  currency     String       @default("USD")
+  limits       Json
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  clubSubscriptions ClubSubscription[]
+
+  @@map("saas_plans")
+}
+
+// ─── Club Subscription (Club → pays → Platform) ────────────────────────────────
+// This is the SaaS subscription, entirely separate from the gym-membership
+// Subscription model below (Member → pays → Gym). One row per Club.
+model ClubSubscription {
+  id                     String                     @id @default(cuid())
+  clubId                 String                     @unique
+  planId                 String
+  status                 PlatformSubscriptionStatus @default(TRIALING)
+  trialEndsAt            DateTime?
+  currentPeriodStart     DateTime                   @default(now())
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean                    @default(false)
+  canceledAt             DateTime?
+  // Provider customer and subscription IDs are nullable for provider-neutral
+  // account state; checkout events use SaasPayment.providerRef.
+  providerCustomerId     String?
+  providerSubscriptionId String?
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+
+  club Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  plan SaasPlan @relation(fields: [planId], references: [id])
+
+  payments SaasPayment[]
+
+  @@index([planId])
+  @@index([status])
+  @@index([clubId, status])
+  @@map("club_subscriptions")
+}
+
+// Platform-level billing ledger — one row per SaaS invoice/charge against a
+// club's ClubSubscription. This is distinct from `Payment`, which records a
+// gym MEMBER's payment for their own membership plan inside a club; this
+// model is the club's OWN payment to the platform for its SaaS plan. Added
+// in Phase 9 to back a real "recent payments" list on /admin/billing instead
+// of fabricating one — no provider assumed here per spec (see
+// ClubSubscription.providerCustomerId), so `providerRef` is just an opaque
+// nullable string for whatever payment provider ends up wired in.
+model SaasPayment {
+  id              String    @id @default(cuid())
+  clubId          String
+  subscriptionId  String
+  amount          Float
+  currency        String    @default("USD")
+  status          String    @default("PENDING") // PENDING | PAID | FAILED | REFUNDED
+  providerRef     String?
+  paymentProvider String?
+  countryCode     String?
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+
+  club         Club             @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  subscription ClubSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([clubId])
+  @@index([subscriptionId])
+  @@index([clubId, paidAt])
+  @@index([status]) // filter PAID / PENDING / FAILED
+  @@map("saas_payments")
+}
+
+model OnboardingEmailVerification {
+  id                    String    @id @default(cuid())
+  email                 String    @unique
+  codeHash              String
+  verificationTokenHash String?
+  expiresAt             DateTime
+  verifiedAt            DateTime?
+  consumedAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([expiresAt])
+  @@map("onboarding_email_verifications")
+}
+
+// ─── User ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  // Null only for role = SUPER_ADMIN (platform staff, not tied to a gym).
+  // Every MEMBER/ADMIN/OWNER/COACH must have a clubId — enforced in
+  // application code at creation time (Prisma can't express a
+  // role-conditional NOT NULL constraint).
+  clubId        String?
+  // Email is unique PER CLUB, not globally: the same person may be a member
+  // at two different gyms with the same email address. SUPER_ADMIN accounts
+  // (clubId null) are additionally protected by a partial unique index —
+  // see migration.sql — since Postgres treats multiple NULLs in a composite
+  // unique constraint as distinct, which @@unique([clubId, email]) alone
+  // would not catch for clubId = null rows.
+  email         String
+  password      String?
+  googleId      String?   @unique
+  name          String
+  phone         String?
+  avatar        String?
+  role          Role      @default(MEMBER)
+  isActive      Boolean   @default(true)
+  emailVerified DateTime?
+
+  // Email verification (6-digit code sent at registration)
+  verificationCodeHash   String?
+  verificationCodeExpiry DateTime?
+
+  // Password reset (hashed six-digit email code)
+  resetTokenHash   String?
+  resetTokenExpiry DateTime?
+
+  // Owner/admin-created accounts: the creator sends an invitation link, the
+  // invitee sets their own password (see /api/auth/accept-invitation). Only
+  // the SHA-256 hash of the token is stored. `invitedBy` is the creator's
+  // user id (kept as a plain string, not a relation, so deleting the creator
+  // never cascades or blocks).
+  invitedBy        String?
+  invitationToken  String?
+  invitationExpiry DateTime?
+
+  // Optional phone verification (SMS OTP) — only used when
+  // SMS_VERIFICATION_ENABLED=true.
+  phoneVerified           DateTime?
+  phoneVerificationHash   String?
+  phoneVerificationExpiry DateTime?
+
+  // ISO 3166-1 alpha-2 country code chosen at signup (e.g. "TN").
+  country String?
+
+  // Session revocation: set on password reset/change. Any JWT whose `iat` is
+  // earlier than this instant is rejected by lib/auth.ts.
+  passwordChangedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Existing relations
+  subscriptions  Subscription[]
+  userSessions   UserSession[]
+  membershipCard MembershipCard?
+  attendances    Attendance[]
+  notifications  Notification[]
+  preferences    UserPreferences?
+  deviceTokens   DeviceToken[]
+
+  // News relations
+  posts    Post[]
+  likes    Like[]
+  comments Comment[]
+
+  // Member reports/complaints ("signalements")
+  memberReports MemberReport[]
+
+  // Optional: set when this user's role is COACH and they're linked to a Coach profile
+  coachProfile Coach?
+
+  club Club? @relation(fields: [clubId], references: [id], onDelete: Restrict)
+
+  @@unique([clubId, email])
+  @@index([clubId])
+  @@index([clubId, role])
+  @@index([invitationToken])
+  @@map("users")
+}
+
+// ─── Membership Plan ──────────────────────────────────────────────────────────
+
+model MembershipPlan {
+  id              String   @id @default(cuid())
+  clubId          String
+  name            String
+  description     String?
+  price           Float
+  currency        String   @default("TND")
+  foreignPriceUsd Float?
+  durationDays    Int
+  features        String[]
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  club          Club           @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  subscriptions Subscription[]
+
+  @@index([clubId])
+  @@map("membership_plans")
+}
+
+// ─── Subscription (gym membership: Member -> pays -> Gym) ─────────────────────
+// NOT the SaaS subscription — see ClubSubscription above for Club -> Platform.
+
+model Subscription {
+  id        String             @id @default(cuid())
+  clubId    String
+  userId    String
+  planId    String
+  startDate DateTime           @default(now())
+  endDate   DateTime
+  status    SubscriptionStatus @default(ACTIVE)
+  autoRenew Boolean            @default(false)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  club     Club           @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan     MembershipPlan @relation(fields: [planId], references: [id])
+  payments Payment[]
+
+  @@index([clubId])
+  @@index([userId])
+  @@index([clubId, status])
+  @@index([planId])
+  @@map("subscriptions")
+}
+
+// ─── Payment ──────────────────────────────────────────────────────────────────
+
+model Payment {
+  id              String    @id @default(cuid())
+  clubId          String
+  subscriptionId  String
+  amount          Float
+  currency        String    @default("TND")
+  status          String    @default("PENDING")
+  paymentMethod   String
+  transactionId   String?
+  paymentProvider String?
+  countryCode     String?
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+
+  club         Club         @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([clubId])
+  @@index([subscriptionId])
+  @@index([clubId, paidAt])
+  @@map("payments")
+}
+
+// ─── Weekly Plan ──────────────────────────────────────────────────────────────
+
+model WeeklyPlan {
+  id         String   @id @default(cuid())
+  clubId     String
+  weekStart  DateTime
+  weekEnd    DateTime
+  isActive   Boolean  @default(false)
+  isArchived Boolean  @default(false)
+  createdBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  club     Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  sessions Session[]
+
+  // Was a global unique([weekStart, weekEnd]) — that would have made it
+  // impossible for two different gyms to both have a plan for the same
+  // calendar week, which is obviously wrong once there's more than one gym.
+  @@unique([clubId, weekStart, weekEnd])
+  @@index([clubId])
+  @@map("weekly_plans")
+}
+
+// ─── Session ──────────────────────────────────────────────────────────────────
+// clubId is denormalized here (also reachable via weeklyPlan.clubId) so that
+// every session query can filter directly on clubId without an extra join —
+// required by the "never trust a client clubId, enforce on every query"
+// rule. Application code must always set it equal to the parent
+// WeeklyPlan's clubId; never take it from client input.
+
+model Session {
+  id              String       @id @default(cuid())
+  clubId          String
+  weeklyPlanId    String
+  day             DayOfWeek
+  startTime       String
+  endTime         String
+  activity        ActivityType
+  coach           String
+  coachId         String?
+  capacity        Int          @default(20)
+  currentBookings Int          @default(0)
+  description     String?
+  location        String       @default("Main Hall")
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  club         Club          @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  weeklyPlan   WeeklyPlan    @relation(fields: [weeklyPlanId], references: [id], onDelete: Cascade)
+  coachRef     Coach?        @relation(fields: [coachId], references: [id])
+  userSessions UserSession[]
+  attendances  Attendance[]
+
+  @@index([clubId])
+  @@index([weeklyPlanId])
+  @@index([coachId])
+  @@index([clubId, day])
+  @@map("sessions")
+}
+
+// ─── Coach ────────────────────────────────────────────────────────────────────
+// coachId on Session already existed as an unused nullable column (a stub
+// from an earlier attempt) — this is the model it was always meant to
+// point at. Session.coach (free-text name) is kept as a denormalized
+// display fallback for sessions created before this model existed.
+
+model Coach {
+  id          String   @id @default(cuid())
+  clubId      String
+  userId      String?  @unique
+  name        String
+  bio         String?
+  photoUrl    String?
+  specialties String[]
+  phone       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  club     Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user     User?     @relation(fields: [userId], references: [id])
+  sessions Session[]
+
+  @@index([clubId])
+  @@index([clubId, isActive]) // active coaches filter
+  @@map("coaches")
+}
+
+// ─── User Session (= Booking) ──────────────────────────────────────────────────
+// clubId denormalized here too, for the same direct-query-filter reason as
+// Session above — bookings are exactly the kind of row a tenant-isolation
+// test needs to be able to query with a flat `WHERE clubId = ?`.
+
+model UserSession {
+  id          String    @id @default(cuid())
+  clubId      String
+  userId      String
+  sessionId   String
+  bookedAt    DateTime  @default(now())
+  cancelledAt DateTime?
+  isCancelled Boolean   @default(false)
+
+  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sessionId])
+  @@index([clubId])
+  @@index([sessionId])
+  @@index([clubId, isCancelled]) // bookings page cancel filter
+  @@index([clubId, bookedAt]) // bookings page sort by date
+  @@index([userId, clubId]) // member's own bookings
+  @@map("user_sessions")
+}
+
+// ─── Membership Card ──────────────────────────────────────────────────────────
+
+model MembershipCard {
+  id         String    @id @default(cuid())
+  clubId     String
+  userId     String    @unique
+  cardNumber String
+  qrCode     String
+  isActive   Boolean   @default(true)
+  issuedAt   DateTime  @default(now())
+  expiresAt  DateTime
+  lastUsedAt DateTime?
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Was globally unique — two different gyms independently numbering cards
+  // "0001" would have collided. Scoped per-club instead.
+  @@unique([clubId, cardNumber])
+  @@index([clubId])
+  @@map("membership_cards")
+}
+
+// ─── Attendance ───────────────────────────────────────────────────────────────
+
+model Attendance {
+  id           String    @id @default(cuid())
+  clubId       String
+  userId       String
+  sessionId    String?
+  checkInTime  DateTime  @default(now())
+  checkOutTime DateTime?
+  createdBy    String?
+
+  club    Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session Session? @relation(fields: [sessionId], references: [id])
+
+  @@index([clubId])
+  @@index([userId])
+  @@index([sessionId])
+  @@map("attendances")
+}
+
+// ─── Notification ─────────────────────────────────────────────────────────────
+
+model Notification {
+  id       String    @id @default(cuid())
+  clubId   String
+  userId   String
+  title    String
+  message  String
+  type     String
+  channels String[]  @default(["SITE"])
+  isRead   Boolean   @default(false)
+  data     Json?
+  sentAt   DateTime  @default(now())
+  readAt   DateTime?
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clubId])
+  @@index([userId, isRead])
+  @@index([clubId, isRead])
+  @@map("notifications")
+}
+
+// ─── User Preferences ─────────────────────────────────────────────────────────
+
+model UserPreferences {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  emailNotifications Boolean  @default(true)
+  pushNotifications  Boolean  @default(true)
+  smsNotifications   Boolean  @default(false)
+  language           Language @default(FR)
+  darkMode           Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+// ─── Post (News / Announcements) ──────────────────────────────────────────────
+
+model Post {
+  id          String   @id @default(cuid())
+  clubId      String
+  authorId    String
+  title       String?
+  content     String
+  mediaUrl    String? // URL of image / video / audio file
+  mediaType   String? // "image" | "video" | "audio"
+  musicUrl    String? // background music URL (for video posts)
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  club     Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes    Like[]
+  comments Comment[]
+
+  @@index([clubId, createdAt])
+  @@index([authorId])
+  @@map("posts")
+}
+
+// ─── Like ─────────────────────────────────────────────────────────────────────
+// Deliberately NOT given its own clubId: a Like is never listed or queried
+// independently of its Post, and its Post is already club-scoped — adding a
+// redundant column here would be defense-in-depth for a row type that has
+// no direct query surface to defend.
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId])
+  @@map("likes")
+}
+
+// ─── Promotion ────────────────────────────────────────────────────────────────
+
+model Promotion {
+  id            String       @id @default(cuid())
+  clubId        String
+  code          String
+  title         String
+  description   String?
+  discountType  DiscountType @default(PERCENT)
+  discountValue Float
+  startDate     DateTime     @default(now())
+  endDate       DateTime?
+  maxUses       Int?
+  usedCount     Int          @default(0)
+  isActive      Boolean      @default(true)
+  // Publication switch: only active AND public offers inside their date window
+  // are shown on the club's public pages (/offres, home). Private offers stay
+  // usable as checkout codes without being advertised.
+  isPublic      Boolean      @default(true)
+  createdBy     String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  // Was globally unique — Gym A having a "SUMMER10" code would have blocked
+  // Gym B from ever using the same code. Scoped per-club instead.
+  @@unique([clubId, code])
+  @@index([clubId])
+  @@map("promotions")
+}
+
+// ─── Device tokens (push notifications) ───────────────────────────────────────
+// One row per installed app instance (Expo push token). A token belongs to ONE
+// user at a time: if another account signs in on the same phone, registration
+// re-assigns the row, so the previous user stops receiving that device's pushes.
+// clubId is denormalized (like other tenant tables) so every send is scoped.
+model DeviceToken {
+  id         String    @id @default(cuid())
+  clubId     String
+  userId     String
+  token      String    @unique
+  platform   String // "ios" | "android"
+  deviceName String?
+  appVersion String?
+  isActive   Boolean   @default(true)
+  lastSeenAt DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clubId, userId, isActive])
+  @@index([userId])
+  @@map("device_tokens")
+}
+
+// ─── Gym Settings (website/branding — one per Club) ────────────────────────────
+// Was a hardcoded singleton (id = "singleton", name defaulting to
+// "Le Club de Gammarth"). Now a proper 1:1 with Club; every gym gets its own
+// row, created during onboarding (Phase 8). The old string default is kept
+// only as a last-resort fallback for `name` so nothing crashes if a Club
+// somehow has no settings row yet — application code should not rely on it.
+
+model GymSettings {
+  id                  String  @id @default(cuid())
+  clubId              String  @unique
+  name                String  @default("My Gym")
+  logoUrl             String?
+  address             String?
+  phone               String?
+  email               String?
+  workingHours        Json?
+  facebookUrl         String?
+  instagramUrl        String?
+  tiktokUrl           String?
+  twitterUrl          String?
+  youtubeUrl          String?
+  websiteUrl          String?
+  description         String?
+  secondaryColor      String? @default("#3b82f6")
+  primaryColor        String? @default("#0f172a")
+  backgroundColor     String? @default("#ffffff")
+  backgroundColorDark String? @default("#0a0a0a")
+  enabledPages        Json?
+  heroTitle           String?
+  heroSubtitle        String?
+  heroImageUrl        String?
+
+  // ─── Guided website setup (theme + one-time re-edit + lock) ──────────────
+  // One of THEME_PRESETS in lib/website-themes.ts, or "custom" once the
+  // owner tweaks colors away from a preset. Purely descriptive — the actual
+  // rendered colors are primaryColor/secondaryColor above.
+  themeId                    String? @default("classic")
+  // 3D hero object chosen by the owner (see lib/website-themes.ts HERO_MODELS).
+  // Null = the default model of the selected theme.
+  heroModel                  String?
+  // Flips true the first time the owner completes the setup wizard
+  // (POST /api/admin/website-setup {action:"complete"} while phase="initial").
+  websiteSetupCompleted      Boolean @default(false)
+  // Flips true (together with websiteCustomizationLocked) when the owner
+  // completes their one allowed extra full customization session.
+  websiteExtraEditUsed       Boolean @default(false)
+  // Once true, PUT /api/admin/settings and PUT /api/admin/page-content
+  // reject direct edits (see lib/website-setup.ts) — the owner must use
+  // WebsiteChangeRequest instead.
+  websiteCustomizationLocked Boolean @default(false)
+  // How the owner chose to build the site right after paying: "WIZARD" (guided setup),
+  // "PRO" (paid professional setup by the platform team) or "MANUAL" (edit everything
+  // by hand). null = not chosen yet -> /admin/get-started.
+  websiteSetupMode           String?
+
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@map("gym_settings")
+}
+
+// ─── Page Content (generic editable text/photo slots per page) ────────────────
+// Each row holds every editable slot for one public page as a flat
+// key -> string map (text or image URL). Which slots exist for a page is
+// defined in code (lib/page-content-schema.ts), not in the DB — adding a
+// new editable spot on a page is a config change, not a migration.
+
+model PageContent {
+  id        String   @id @default(cuid())
+  clubId    String
+  pageKey   String
+  content   Json     @default("{}")
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  // Was globally unique on pageKey alone — every gym would have shared (and
+  // overwritten each other's) content for e.g. "home". Scoped per-club.
+  @@unique([clubId, pageKey])
+  @@index([clubId])
+  @@map("page_content")
+}
+
+// ─── Website change requests (post-lock customization workflow) ──────────────
+// Once GymSettings.websiteCustomizationLocked is true, the owner can no
+// longer PUT /api/admin/settings or /api/admin/page-content directly (see
+// lib/website-setup.ts). Instead they describe the change here; platform
+// staff (SUPER_ADMIN) triage it from /platform/website-requests.
+enum WebsiteChangeRequestStatus {
+  PENDING // submitted, awaiting platform review
+  APPROVED // platform agrees to make the change (not yet done)
+  REJECTED // platform declines, reviewNote explains why
+  APPLIED // the change has been made
+}
+
+model WebsiteChangeRequest {
+  id          String                     @id @default(cuid())
+  clubId      String
+  requestedBy String // User.id of the OWNER who submitted it
+  description String                     @db.Text
+  status      WebsiteChangeRequestStatus @default(PENDING)
+  reviewedBy  String? // User.id (SUPER_ADMIN) who last set the status
+  reviewNote  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([clubId, status])
+  @@index([status])
+  @@map("website_change_requests")
+}
+
+// ─── Role Permissions ───────────────────────────────────────────────────────────
+// Fine-grained toggles the OWNER can flip for the ADMIN role. A missing row for
+// a given key means "allowed" (keeps current Admin behavior unless the Owner
+// explicitly revokes it) — only rows with allowed=false actually restrict.
+
+model RolePermission {
+  id        String   @id @default(cuid())
+  clubId    String
+  role      Role
+  key       String
+  allowed   Boolean  @default(true)
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  // Was global @@unique([role, key]) — every gym would have shared the same
+  // ADMIN permission toggles. Scoped per-club so each Owner controls their
+  // own Admins independently.
+  @@unique([clubId, role, key])
+  @@index([clubId])
+  @@map("role_permissions")
+}
+
+// ─── Comment ──────────────────────────────────────────────────────────────────
+// Not given a direct clubId for the same reason as Like — always reached
+// through its (club-scoped) Post.
+
+model Comment {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([userId])
+  @@map("comments")
+}
+
+// ─── Member Report ────────────────────────────────────────────────────────────
+// Member-submitted complaints/issues ("signalements"). Members create these
+// from /dashboard/reports; Admin/Owner review and treat them from
+// /admin/reports.
+
+model MemberReport {
+  id        String       @id @default(cuid())
+  clubId    String
+  userId    String
+  subject   String
+  message   String
+  status    ReportStatus @default(PENDING)
+  adminNote String?
+  treatedBy String?
+  treatedAt DateTime?
+  createdAt DateTime     @default(now())
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clubId])
+  @@index([userId])
+  @@index([status])
+  @@index([clubId, status]) // admin reports filter by status
+  @@map("member_reports")
+}
+
+// ─── Activity Log ─────────────────────────────────────────────────────────────
+// Audit trail for all significant actions performed by admins/owners/members
+// (clubId set) AND platform-level actions by SUPER_ADMIN (clubId null —
+// e.g. suspending a gym isn't an action that belongs to any one gym's log).
+// Written via lib/activity-log.ts helper; never updated, only inserted.
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  clubId     String?
+  actorId    String?
+  actorName  String?
+  actorRole  String?
+  action     String
+  category   String
+  targetId   String?
+  targetName String?
+  detail     Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  club Club? @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([clubId])
+  @@index([actorId])
+  @@index([category])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+enum DomainRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CONFIGURING
+  ACTIVE
+}
+
+enum ServiceRequestType {
+  CUSTOM_DOMAIN
+  PROFESSIONAL_SETUP
+  WEBSITE_PERSONALIZATION
+  PREMIUM_CUSTOMIZATION
+}
+
+enum ServiceRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model DomainRequest {
+  id            String              @id @default(cuid())
+  clubId        String
+  requestedBy   String
+  domain        String
+  status        DomainRequestStatus @default(PENDING)
+  reviewedBy    String?
+  reviewNote    String?
+  reviewedAt    DateTime?
+  dnsInstructions Json?
+  priceAtRequest Float
+  currency       String             @default("USD")
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([clubId])
+  @@index([status])
+  @@unique([domain])
+  @@map("domain_requests")
+}
+
+model ServiceRequest {
+  id            String               @id @default(cuid())
+  clubId        String
+  requestedBy   String
+  type          ServiceRequestType
+  status        ServiceRequestStatus @default(PENDING)
+  description   String?              @db.Text
+  notes         String?
+  reviewedBy    String?
+  reviewNote    String?
+  reviewedAt    DateTime?
+  completedAt   DateTime?
+  priceAtRequest Float
+  currency       String              @default("USD")
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([clubId])
+  @@index([type])
+  @@index([status])
+  @@map("service_requests")
+}
+
+model ServicePrice {
+  id        String  @id @default(cuid())
+  serviceType String @unique
+  price     Float
+  currency  String  @default("USD")
+  isActive  Boolean @default(true)
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@map("service_prices")
+}

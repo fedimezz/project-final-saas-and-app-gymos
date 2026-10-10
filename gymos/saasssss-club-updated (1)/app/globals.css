@@ -1,0 +1,399 @@
+@import "tailwindcss";
+@import "./themes.css";
+
+/* ==========================================================================
+   DARK MODE VARIANT FOR TAILWIND v4
+   ========================================================================== */
+@custom-variant dark (&:where(.dark, .dark *));
+
+
+/* ==========================================================================
+   CLUB THEME — brand palette
+   The UI was written with Tailwind's emerald / green / teal classes. Remapping
+   those palettes to the club's own colors (set on <html> by app/layout.tsx and
+   ClubSettingsContext) makes the owner's chosen theme apply everywhere without
+   touching hundreds of class names. Defaults = the platform's own green.
+   ========================================================================== */
+@theme {
+  --color-emerald-50: color-mix(in srgb, var(--brand) 8%, white);
+  --color-emerald-100: color-mix(in srgb, var(--brand) 16%, white);
+  --color-emerald-200: color-mix(in srgb, var(--brand) 30%, white);
+  --color-emerald-300: color-mix(in srgb, var(--brand) 45%, white);
+  --color-emerald-400: color-mix(in srgb, var(--brand) 62%, white);
+  --color-emerald-500: var(--brand);
+  --color-emerald-600: color-mix(in srgb, var(--brand) 86%, black);
+  --color-emerald-700: color-mix(in srgb, var(--brand) 70%, black);
+  --color-emerald-800: color-mix(in srgb, var(--brand) 55%, black);
+  --color-emerald-900: color-mix(in srgb, var(--brand) 40%, black);
+  --color-emerald-950: color-mix(in srgb, var(--brand) 26%, black);
+
+  --color-green-50: color-mix(in srgb, var(--brand) 8%, white);
+  --color-green-100: color-mix(in srgb, var(--brand) 16%, white);
+  --color-green-200: color-mix(in srgb, var(--brand) 30%, white);
+  --color-green-300: color-mix(in srgb, var(--brand) 45%, white);
+  --color-green-400: color-mix(in srgb, var(--brand) 62%, white);
+  --color-green-500: var(--brand);
+  --color-green-600: color-mix(in srgb, var(--brand) 86%, black);
+  --color-green-700: color-mix(in srgb, var(--brand) 70%, black);
+  --color-green-800: color-mix(in srgb, var(--brand) 55%, black);
+  --color-green-900: color-mix(in srgb, var(--brand) 40%, black);
+  --color-green-950: color-mix(in srgb, var(--brand) 26%, black);
+
+  --color-teal-50: color-mix(in srgb, var(--brand-2) 8%, white);
+  --color-teal-100: color-mix(in srgb, var(--brand-2) 16%, white);
+  --color-teal-200: color-mix(in srgb, var(--brand-2) 30%, white);
+  --color-teal-300: color-mix(in srgb, var(--brand-2) 45%, white);
+  --color-teal-400: color-mix(in srgb, var(--brand-2) 62%, white);
+  --color-teal-500: var(--brand-2);
+  --color-teal-600: color-mix(in srgb, var(--brand-2) 86%, black);
+  --color-teal-700: color-mix(in srgb, var(--brand-2) 70%, black);
+  --color-teal-800: color-mix(in srgb, var(--brand-2) 55%, black);
+  --color-teal-900: color-mix(in srgb, var(--brand-2) 40%, black);
+  --color-teal-950: color-mix(in srgb, var(--brand-2) 26%, black);
+}
+
+/* ==========================================================================
+   CSS VARIABLES (Single Source of Truth - Luxury Theme Tokens)
+   ========================================================================== */
+:root {
+  /* Backgrounds - Refined Crisp Light Theme */
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-muted: #f1f5f9;
+  --bg-glass: rgba(255, 255, 255, 0.75);
+  
+  /* Text colors */
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #566377;
+  --text-disabled: #94a3b8;
+  
+  /* Borders */
+  --border-light: #e2e8f0;
+  --border-medium: #cbd5e1;
+  --border-glow: color-mix(in srgb, var(--brand) 25%, transparent);
+  
+  /* Brand colors */
+  --brand: #10b981;
+  --brand-2: #14b8a6;
+  --brand-contrast: #020617;
+  --primary: #0f172a;
+  --primary-dark: #020617;
+  --primary-light: #1e293b;
+  --secondary: #10b981;
+  --secondary-dark: #059669;
+  
+  /* Status colors */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+  /* Status colors used AS TEXT: the base colors above are for fills/icons; on
+     light surfaces they are below 4.5:1, so text uses these darker variants. */
+  --success-fg: #047857;
+  --warning-fg: #b45309;
+  --danger-fg: #b91c1c;
+  --info-fg: #1d4ed8;
+  
+  /* Effects */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.08);
+  --shadow-lg: 0 12px 24px -4px rgb(0 0 0 / 0.12);
+  --shadow-glow: 0 0 25px -5px color-mix(in srgb, var(--brand) 30%, transparent);
+  --radius: 16px;
+}
+
+/* Dark mode variables - Premium OLED Ultra-Slate Theme */
+.dark {
+  /* Backgrounds */
+  --bg-primary: #090d16;
+  --bg-secondary: #0d1424;
+  --bg-card: #131c2e;
+  --bg-muted: #1e293b;
+  --bg-glass: rgba(13, 20, 36, 0.75);
+  
+  /* Text colors */
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-disabled: #64748b;
+  
+  /* Borders */
+  --border-light: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.15);
+  --border-glow: color-mix(in srgb, var(--brand) 40%, transparent);
+  
+  /* Brand colors */
+  --primary: #38bdf8;
+  --primary-dark: #0284c7;
+  --primary-light: #7dd3fc;
+  --secondary: #10b981;
+  --secondary-dark: #059669;
+
+  /* On dark surfaces the base status colors already pass 4.5:1. */
+  --success-fg: #34d399;
+  --warning-fg: #fbbf24;
+  --danger-fg: #f87171;
+  --info-fg: #60a5fa;
+}
+
+/* ==========================================================================
+   BASE STYLES
+   ========================================================================== */
+* {
+  border-color: var(--border-light);
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', Roboto, sans-serif;
+  transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1), color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow-x: hidden;
+}
+
+/* Selection Color */
+::selection {
+  background-color: color-mix(in srgb, var(--brand) 30%, transparent);
+  color: inherit;
+}
+
+/* ==========================================================================
+   UTILITY CLASSES
+   ========================================================================== */
+.bg-primary { background-color: var(--bg-primary) !important; }
+.bg-secondary { background-color: var(--bg-secondary) !important; }
+.bg-card { background-color: var(--bg-card) !important; }
+.bg-muted { background-color: var(--bg-muted) !important; }
+
+.text-primary { color: var(--text-primary) !important; }
+.text-secondary { color: var(--text-secondary) !important; }
+.text-muted { color: var(--text-muted) !important; }
+
+.border-border { border-color: var(--border-light) !important; }
+
+.bg-primary-light { background-color: var(--primary-light); }
+.text-primary-light { color: var(--primary-light); }
+.text-danger { color: var(--danger-fg) !important; }
+.text-success { color: var(--success-fg) !important; }
+.text-warning { color: var(--warning-fg) !important; }
+.text-info { color: var(--info-fg) !important; }
+
+/* Stable "active nav" emerald — Luxury active highlight */
+.bg-nav-active {
+  background: linear-gradient(135deg, var(--brand) 0%, color-mix(in srgb, var(--brand) 80%, black) 100%) !important;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--brand) 35%, transparent) !important;
+  color: var(--brand-contrast) !important;
+}
+
+/* Solid brand buttons/badges: keep their text readable whatever color the
+   owner picked (a black "Minimaliste" theme must not get black text). */
+.bg-emerald-500,
+.bg-emerald-600 {
+  color: var(--brand-contrast);
+}
+
+/* ==========================================================================
+   LUXURY SAAS GLASSMORPHISM & CARD EFFECTS
+   ========================================================================== */
+@layer components {
+  .card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: var(--shadow-sm);
+  }
+  
+  .card-hover {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: var(--shadow-sm);
+  }
+  
+  .card-hover:hover {
+    transform: translateY(-3px) scale(1.005);
+    border-color: var(--border-medium);
+    box-shadow: var(--shadow-md);
+  }
+  
+  .glass-panel {
+    background-color: var(--bg-glass);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border-light);
+  }
+  
+  .glass-card {
+    background-color: var(--bg-glass);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+  }
+
+  .glow-border {
+    position: relative;
+  }
+  .glow-border::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--brand) 40%, transparent), transparent 60%, color-mix(in srgb, var(--brand-2) 30%, transparent));
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+  
+  .container-custom {
+    max-width: 1400px;
+    margin-inline: auto;
+    padding-inline: 1.5rem;
+  }
+  
+  .section-padding {
+    padding-top: 6rem;
+    padding-bottom: 6rem;
+  }
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--text-muted);
+  border-radius: 9999px;
+  opacity: 0.5;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-secondary);
+}
+
+/* ==========================================================================
+   ANIMATIONS & KEYFRAMES
+   ========================================================================== */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+.animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-slide-in { animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-pulse-glow { animation: pulseGlow 4s infinite cubic-bezier(0.4, 0, 0.6, 1); }
+
+/* ==========================================================================
+   GLOBAL SCROLLBAR
+   ========================================================================== */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+
+/* ==========================================================================
+   DARK MODE SAFETY LAYER
+   Native controls follow the theme, and legacy light-only utilities
+   (bg-white, text-gray-900, ...) that were written without a dark: variant
+   are mapped onto the semantic tokens, so no page can end up with dark text
+   on a dark card. New code should use the tokens (bg-card, text-primary, ...)
+   directly; add .keep-light to an element that must stay white (e.g. a QR code).
+   ========================================================================== */
+html { color-scheme: light; }
+html.dark { color-scheme: dark; }
+
+/* Dropdown lists, date pickers, scrollbars, autofill */
+select option,
+select optgroup {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+input:-webkit-autofill,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--text-primary);
+  caret-color: var(--text-primary);
+  box-shadow: 0 0 0 1000px var(--bg-card) inset;
+  transition: background-color 9999s ease-out 0s;
+}
+
+/* Surfaces */
+.dark .bg-white:not(.rounded-full):not(.keep-light) { background-color: var(--bg-card); }
+.dark .bg-gray-50:not(.keep-light),
+.dark .bg-gray-100:not(.keep-light),
+.dark .bg-slate-50:not(.keep-light),
+.dark .bg-slate-100:not(.keep-light),
+.dark .bg-neutral-50:not(.keep-light),
+.dark .bg-neutral-100:not(.keep-light),
+.dark .hover\:bg-gray-50:hover,
+.dark .hover\:bg-gray-100:hover,
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover { background-color: var(--bg-muted); }
+
+/* Text */
+.dark .text-gray-900, .dark .text-gray-800,
+.dark .text-slate-900, .dark .text-slate-800,
+.dark .text-neutral-900, .dark .text-neutral-800,
+.dark .text-black:not(.keep-light) { color: var(--text-primary); }
+.dark .text-gray-700, .dark .text-gray-600,
+.dark .text-slate-700, .dark .text-slate-600,
+.dark .text-neutral-700, .dark .text-neutral-600 { color: var(--text-secondary); }
+.dark .text-gray-500, .dark .text-slate-500, .dark .text-neutral-500 { color: var(--text-muted); }
+
+/* Borders / dividers */
+.dark .border-gray-100, .dark .border-gray-200,
+.dark .border-slate-100, .dark .border-slate-200,
+.dark .border-neutral-100, .dark .border-neutral-200 { border-color: var(--border-light); }
+.dark .border-gray-300, .dark .border-slate-300, .dark .border-neutral-300 { border-color: var(--border-medium); }
+.dark .divide-gray-100 > :not(:last-child),
+.dark .divide-gray-200 > :not(:last-child) { border-color: var(--border-light); }
+
+/* Focus ring that is visible on both themes */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
