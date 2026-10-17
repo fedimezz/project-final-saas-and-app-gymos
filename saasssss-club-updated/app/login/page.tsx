@@ -1,0 +1,8 @@
+import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { isTenantHost } from "@/lib/host";
+
+export default async function LoginRedirectPage() {
+  const host = (await headers()).get("host") ?? "localhost";
+  redirect(isTenantHost(host) ? "/user/login" : "/platform/login");
+}
