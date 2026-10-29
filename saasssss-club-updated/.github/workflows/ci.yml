@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+  build:
+    runs-on: ubuntu-latest
+    # Runs against a real, ephemeral Postgres instance so a missing/broken
+    # Prisma model (like MemberReport, which had routes but no schema
+    # definition until this was fixed) fails CI instead of shipping silently.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: club
+          POSTGRES_PASSWORD: club
+          POSTGRES_DB: club
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U club"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://club:club@localhost:5432/club
+      DIRECT_URL: postgresql://club:club@localhost:5432/club
+      JWT_SECRET: ci-only-placeholder-secret-do-not-use-in-prod
+      APP_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Applies the *tracked* migrations under prisma/migrations/ instead of
+      # `db push`. This is deliberately stricter: `migrate deploy` fails if
+      # the checked-in migration history doesn't actually reproduce the
+      # current prisma/schema.prisma (e.g. someone edited the schema and
+      # forgot to run `prisma migrate dev` to generate the matching
+      # migration file) — `db push` would have silently applied the schema
+      # directly and let that drift ship unnoticed.
+      - name: Apply Prisma migrations to the CI database
+        run: npx prisma migrate deploy
+
+      - name: Build
+        run: npm run build
